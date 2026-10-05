@@ -205,11 +205,22 @@ async function loadLibrary() {
 
 /* -------------------------------- поиск ------------------------------ */
 
+// Раздел, в который добавляет кнопка на карточке поиска. Запоминается между
+// сессиями: обычно добавляют несколько тайтлов подряд в один и тот же список.
+const ADD_STATUS_KEY = 'lof:add-status';
+
+function addStatus() {
+  const chosen = $('#search-status')?.value;
+  return STATUS_LABELS[chosen] ? chosen : 'watched';
+}
+
 function searchCard(item) {
   const meta = [item.year, TYPE_LABELS[item.mediaType], item.source === 'tmdb' ? 'TMDB' : 'OMDb']
     .filter(Boolean)
     .join(' · ');
-  const label = item.inList ? `В списке: ${STATUS_LABELS[item.savedStatus] ?? ''}` : 'Добавить';
+  const label = item.inList
+    ? `В списке: ${STATUS_LABELS[item.savedStatus] ?? ''}`
+    : `+ ${STATUS_LABELS[addStatus()]}`;
 
   return `
     <article class="card" data-ref="${escapeHtml(item.ref)}">
@@ -273,16 +284,20 @@ async function quickAdd(ref, button) {
   try {
     const { entry, updated } = await api('/entries', {
       method: 'POST',
-      body: { ref, status: 'watched' },
+      body: { ref, status: addStatus() },
     });
-    toast(updated ? `«${entry.title}» обновлён` : `«${entry.title}» добавлен в просмотренные`);
+    toast(
+      updated
+        ? `«${entry.title}» перенесён: ${STATUS_LABELS[entry.status].toLowerCase()}`
+        : `«${entry.title}» добавлен: ${STATUS_LABELS[entry.status].toLowerCase()}`
+    );
     button.classList.remove('btn--primary');
     button.textContent = `В списке: ${STATUS_LABELS[entry.status]}`;
     const card = button.closest('.card');
     if (card && !card.querySelector('.card__badges')) {
       card.querySelector('.card__poster').insertAdjacentHTML(
         'beforeend',
-        '<div class="card__badges"><span class="badge badge--watched">✓ в списке</span></div>'
+        `<div class="card__badges"><span class="badge badge--${entry.status}">✓ в списке</span></div>`
       );
     }
   } catch (error) {
@@ -679,6 +694,18 @@ function wireEvents() {
   $('#search-form').addEventListener('submit', runSearch);
   $('#search-type').addEventListener('change', () => runSearch());
 
+  $('#search-status').addEventListener('change', (event) => {
+    try {
+      localStorage.setItem(ADD_STATUS_KEY, event.target.value);
+    } catch {
+      /* приватный режим — просто не запоминаем выбор */
+    }
+    // Перерисовываем выдачу, чтобы подписи кнопок совпали с новым разделом.
+    if (state.searchResults.length) {
+      $('#search-grid').innerHTML = state.searchResults.map(searchCard).join('');
+    }
+  });
+
   // модалка
   $$('[data-close-modal]').forEach((node) => node.addEventListener('click', closeModal));
   document.addEventListener('keydown', (event) => {
@@ -743,6 +770,13 @@ function wireEvents() {
 async function boot() {
   wireEvents();
   setAuthMode('login');
+
+  try {
+    const savedStatus = localStorage.getItem(ADD_STATUS_KEY);
+    if (savedStatus && STATUS_LABELS[savedStatus]) $('#search-status').value = savedStatus;
+  } catch {
+    /* приватный режим — остаётся раздел по умолчанию */
+  }
 
   // Красивые ссылки /u/<ник> переводим в hash-маршрут.
   const prettyProfile = location.pathname.match(/^\/u\/(.+)$/);
