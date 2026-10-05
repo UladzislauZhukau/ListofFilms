@@ -2,9 +2,13 @@
 # Render → Blueprints → New Blueprint Instance → выбрать этот репозиторий.
 
 databases:
+  # Регион обязателен и должен совпадать с регионом веб-сервиса ниже:
+  # внутренний хост базы (dpg-...-a, без домена) резолвится только внутри
+  # одного региона, иначе сервис падает с ENOTFOUND на старте.
   - name: listoffilms-db
     databaseName: listoffilms
     user: listoffilms
+    region: frankfurt
     plan: free
 
 services:

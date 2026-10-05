@@ -81,7 +81,14 @@ app.use((error, _req, res, _next) => {
 /* ------------------------------- запуск ----------------------------- */
 
 const server = await (async () => {
-  await initDb();
+  try {
+    await initDb();
+  } catch (error) {
+    // Падаем осознанно: без базы приложение молча ушло бы на SQLite внутри
+    // контейнера и теряло бы все данные при каждом редеплое.
+    console.error(`[бд] ${error.message}`);
+    process.exit(1);
+  }
   console.log(`[бд] ${dbLabel()}`);
 
   const providers = providerStatus();
