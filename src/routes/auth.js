@@ -27,10 +27,17 @@ authRouter.post('/register', async (req, res) => {
   const existing = await users.findByUsername(checkedName.username);
   if (existing) return res.status(409).json({ error: 'Этот ник уже занят' });
 
-  const user = await users.create({
-    username: checkedName.username,
-    passwordHash: await hashPassword(checkedPassword.password),
-  });
+  let user;
+  try {
+    user = await users.create({
+      username: checkedName.username,
+      passwordHash: await hashPassword(checkedPassword.password),
+    });
+  } catch (error) {
+    // Ник заняли между проверкой выше и вставкой — обычная гонка, не сбой.
+    if (error.status === 409) return res.status(409).json({ error: error.message });
+    throw error;
+  }
 
   issueSession(res, user);
   res.status(201).json({ user: publicUser(user) });

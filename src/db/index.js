@@ -55,15 +55,31 @@ function mapUser(row) {
   };
 }
 
+// Два драйвера сообщают о нарушении UNIQUE по-разному: PostgreSQL кодом
+// 23505, SQLite — текстом ошибки.
+export function isUsernameTaken(error) {
+  return error?.code === '23505' || /UNIQUE constraint failed/i.test(error?.message ?? '');
+}
+
 export const users = {
+  // Проверки занятости ника в маршруте мало: два одновременных запроса
+  // успевают пройти её оба, и спасает только UNIQUE в схеме. Переводим его
+  // нарушение в ту же ошибку, что и обычный дубль.
   async create({ username, passwordHash }) {
-    const rows = await db().all(
-      `INSERT INTO users (username, username_key, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING ${USER_COLUMNS}`,
-      [username, normalizeUsername(username), passwordHash]
-    );
-    return mapUser(rows[0]);
+    try {
+      const rows = await db().all(
+        `INSERT INTO users (username, username_key, password_hash)
+         VALUES ($1, $2, $3)
+         RETURNING ${USER_COLUMNS}`,
+        [username, normalizeUsername(username), passwordHash]
+      );
+      return mapUser(rows[0]);
+    } catch (error) {
+      if (!isUsernameTaken(error)) throw error;
+      const taken = new Error('Этот ник уже занят');
+      taken.status = 409;
+      throw taken;
+    }
   },
 
   async findByUsername(username) {
