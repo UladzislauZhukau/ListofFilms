@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Личный трекер просмотренных фильмов и сериалов" />
+    <meta name="theme-color" content="#0d0f14" />
+    <title>ListOfFilms — трекер просмотренного</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23f0b429'/%3E%3Cpath d='M9 8h14v16H9z' fill='%230d0f14'/%3E%3Cpath d='M12 11h2v2h-2zm6 0h2v2h-2zm-6 4h2v2h-2zm6 0h2v2h-2zm-6 4h2v2h-2zm6 0h2v2h-2z' fill='%23f0b429'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- ------------------------------ вход ------------------------------ -->
+    <main id="auth-view" class="auth hidden">
+      <section class="auth__card">
+        <div class="auth__brand">
+          <span class="auth__logo">🎬</span>
+          <h1>ListOfFilms</h1>
+          <p>Список того, что вы уже посмотрели — и что ещё впереди.</p>
+        </div>
+
+        <div class="tabs tabs--pill" role="tablist">
+          <button class="tab is-active" data-auth-tab="login" type="button">Вход</button>
+          <button class="tab" data-auth-tab="register" type="button">Регистрация</button>
+        </div>
+
+        <form id="auth-form" autocomplete="off" novalidate>
+          <label class="field">
+            <span>Ник</span>
+            <input
+              id="auth-username"
+              name="username"
+              type="text"
+              placeholder="например, cinemaniac"
+              minlength="3"
+              maxlength="24"
+              autocomplete="username"
+              required
+            />
+          </label>
+
+          <label class="field">
+            <span>Пароль</span>
+            <input
+              id="auth-password"
+              name="password"
+              type="password"
+              placeholder="минимум 6 символов"
+              minlength="6"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+
+          <label class="field hidden" id="auth-confirm-field">
+            <span>Пароль ещё раз</span>
+            <input id="auth-confirm" type="password" autocomplete="new-password" />
+          </label>
+
+          <p id="auth-error" class="form-error hidden"></p>
+
+          <button class="btn btn--primary btn--block" type="submit" id="auth-submit">Войти</button>
+        </form>
+
+        <p class="auth__note">Почта не нужна — только ник и пароль.</p>
+      </section>
+    </main>
+
+    <!-- ----------------------------- приложение ------------------------ -->
+    <div id="app-view" class="app hidden">
+      <header class="topbar">
+        <a class="topbar__brand" href="#/library">
+          <span>🎬</span> ListOfFilms
+        </a>
+
+        <nav class="topbar__nav" id="main-nav">
+          <a class="navlink" href="#/library">Библиотека</a>
+          <a class="navlink" href="#/search">Поиск</a>
+          <a class="navlink" href="#/stats">Статистика</a>
+          <a class="navlink" href="#/profile">Профиль</a>
+        </nav>
+
+        <div class="topbar__user">
+          <span id="current-user" class="topbar__username"></span>
+          <button class="btn btn--ghost btn--sm" id="logout-btn" type="button">Выйти</button>
+        </div>
+      </header>
+
+      <!-- библиотека -->
+      <main class="view hidden" id="view-library">
+        <div class="view__head">
+          <h2>Моя библиотека</h2>
+          <a class="btn btn--primary btn--sm" href="#/search">+ Добавить фильм</a>
+        </div>
+
+        <div class="filters">
+          <div class="tabs" id="status-tabs" role="tablist"></div>
+          <div class="filters__row">
+            <input
+              id="library-search"
+              class="input input--search"
+              type="search"
+              placeholder="Фильтр по названию, жанру, заметке…"
+            />
+            <select id="library-type" class="input input--select">
+              <option value="all">Фильмы и сериалы</option>
+              <option value="movie">Только фильмы</option>
+              <option value="tv">Только сериалы</option>
+            </select>
+            <select id="library-sort" class="input input--select">
+              <option value="added">Сначала новые</option>
+              <option value="watched">По дате просмотра</option>
+              <option value="rating">По оценке</option>
+              <option value="year">По году выхода</option>
+              <option value="title">По названию</option>
+            </select>
+            <button class="chip" id="library-fav" type="button" aria-pressed="false">★ Избранное</button>
+          </div>
+        </div>
+
+        <div id="library-grid" class="grid"></div>
+        <div id="library-empty" class="empty hidden"></div>
+      </main>
+
+      <!-- поиск -->
+      <main class="view hidden" id="view-search">
+        <div class="view__head">
+          <h2>Поиск по TMDB и OMDb</h2>
+          <span class="provider-status" id="provider-status"></span>
+        </div>
+
+        <form id="search-form" class="searchbar">
+          <input
+            id="search-input"
+            class="input input--search"
+            type="search"
+            placeholder="Название фильма или сериала…"
+            autocomplete="off"
+          />
+          <select id="search-type" class="input input--select">
+            <option value="all">Везде</option>
+            <option value="movie">Фильмы</option>
+            <option value="tv">Сериалы</option>
+          </select>
+          <button class="btn btn--primary" type="submit">Найти</button>
+        </form>
+
+        <div id="search-grid" class="grid"></div>
+        <div id="search-empty" class="empty"></div>
+      </main>
+
+      <!-- статистика -->
+      <main class="view hidden" id="view-stats">
+        <div class="view__head"><h2>Статистика</h2></div>
+        <div id="stats-body"></div>
+      </main>
+
+      <!-- профиль -->
+      <main class="view hidden" id="view-profile">
+        <div class="view__head"><h2>Профиль</h2></div>
+
+        <div class="panels">
+          <section class="panel">
+            <h3>Как вас видят другие</h3>
+            <form id="profile-form">
+              <label class="field">
+                <span>Отображаемое имя</span>
+                <input id="profile-display" class="input" type="text" maxlength="48" />
+              </label>
+              <label class="field">
+                <span>О себе</span>
+                <textarea id="profile-bio" class="input" rows="4" maxlength="500"></textarea>
+              </label>
+              <button class="btn btn--primary" type="submit">Сохранить</button>
+            </form>
+            <p class="panel__hint">
+              Публичная ссылка на ваш список:
+              <a id="public-link" href="#/library" target="_blank" rel="noopener"></a>
+            </p>
+          </section>
+
+          <section class="panel">
+            <h3>Смена пароля</h3>
+            <form id="password-form">
+              <label class="field">
+                <span>Текущий пароль</span>
+                <input id="password-current" class="input" type="password" autocomplete="current-password" />
+              </label>
+              <label class="field">
+                <span>Новый пароль</span>
+                <input id="password-new" class="input" type="password" autocomplete="new-password" minlength="6" />
+              </label>
+              <button class="btn" type="submit">Обновить пароль</button>
+            </form>
+          </section>
+
+          <section class="panel panel--danger">
+            <h3>Удаление аккаунта</h3>
+            <p class="panel__hint">Удалится профиль и весь список. Отменить нельзя.</p>
+            <form id="delete-form">
+              <label class="field">
+                <span>Подтвердите паролем</span>
+                <input id="delete-password" class="input" type="password" autocomplete="current-password" />
+              </label>
+              <button class="btn btn--danger" type="submit">Удалить аккаунт</button>
+            </form>
+          </section>
+        </div>
+      </main>
+
+      <!-- публичный профиль -->
+      <main class="view hidden" id="view-public">
+        <div id="public-body"></div>
+      </main>
+    </div>
+
+    <!-- -------------------------------- модалка ------------------------- -->
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal__backdrop" data-close-modal></div>
+      <div class="modal__card">
+        <button class="modal__close" type="button" data-close-modal aria-label="Закрыть">×</button>
+        <div id="modal-content"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <div id="boot" class="boot">Загрузка…</div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

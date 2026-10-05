@@ -1,0 +1,33 @@
+# Blueprint для render.com: веб-сервис + управляемый PostgreSQL.
+# Render → Blueprints → New Blueprint Instance → выбрать этот репозиторий.
+
+databases:
+  - name: listoffilms-db
+    databaseName: listoffilms
+    user: listoffilms
+    plan: free
+
+services:
+  - type: web
+    name: listoffilms
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: listoffilms-db
+          property: connectionString
+      # Render сгенерирует секрет сам — его не нужно хранить в репозитории.
+      - key: SESSION_SECRET
+        generateValue: true
+      # sync: false — значение вводится в дашборде Render вручную.
+      - key: TMDB_API_KEY
+        sync: false
+      - key: OMDB_API_KEY
+        sync: false
