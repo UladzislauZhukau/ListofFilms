@@ -81,6 +81,14 @@ app.use((error, _req, res, _next) => {
 /* ------------------------------- запуск ----------------------------- */
 
 const server = await (async () => {
+  // На Render эти переменные подставляет платформа. Печатаем их первой
+  // строкой, чтобы по логу было видно, какому именно сервису он принадлежит:
+  // при нескольких сервисах из одного репозитория иначе легко перепутать.
+  if (process.env.RENDER_SERVICE_NAME) {
+    const commit = (process.env.RENDER_GIT_COMMIT || '').slice(0, 7);
+    console.log(`[сервис] ${process.env.RENDER_SERVICE_NAME}${commit ? ` @ ${commit}` : ''}`);
+  }
+
   try {
     await initDb();
   } catch (error) {
