@@ -13,7 +13,7 @@ const state = {
   user: null,
   authMode: 'login',
   library: { entries: [], counts: {} },
-  filters: { status: 'all', type: 'all', sort: 'added', q: '', favorite: false },
+  filters: { status: 'all', type: 'all', genre: '', sort: 'added', q: '', favorite: false },
   searchResults: [],
 };
 
@@ -179,14 +179,38 @@ function renderStatusTabs() {
     .join('');
 }
 
+// Перерисовывает список жанров, не теряя выбранный: даже если после смены
+// других фильтров он перестал встречаться, пункт остаётся, иначе выбор
+// молча сбросился бы и показал не то, что просили.
+function renderGenreOptions(genres) {
+  const select = $('#library-genre');
+  const chosen = state.filters.genre;
+  const options = ['<option value="">Все жанры</option>'];
+
+  for (const genre of genres) {
+    const selected = genre.value === chosen ? ' selected' : '';
+    options.push(
+      `<option value="${escapeHtml(genre.value)}"${selected}>${escapeHtml(genre.label)} (${genre.count})</option>`
+    );
+  }
+
+  if (chosen && !genres.some((genre) => genre.value === chosen)) {
+    options.push(`<option value="${escapeHtml(chosen)}" selected>${escapeHtml(chosen)} (0)</option>`);
+  }
+
+  select.innerHTML = options.join('');
+}
+
 async function loadLibrary() {
-  const { status, type, sort, q, favorite } = state.filters;
+  const { status, type, genre, sort, q, favorite } = state.filters;
   const params = new URLSearchParams({ status, type, sort });
   if (q) params.set('q', q);
+  if (genre) params.set('genre', genre);
   if (favorite) params.set('favorite', 'true');
 
   state.library = await api(`/entries?${params}`);
   renderStatusTabs();
+  renderGenreOptions(state.library.genres || []);
 
   const grid = $('#library-grid');
   const empty = $('#library-empty');
@@ -655,6 +679,11 @@ function wireEvents() {
 
   $('#library-type').addEventListener('change', (event) => {
     state.filters.type = event.target.value;
+    loadLibrary().catch((error) => toast(error.message, 'error'));
+  });
+
+  $('#library-genre').addEventListener('change', (event) => {
+    state.filters.genre = event.target.value;
     loadLibrary().catch((error) => toast(error.message, 'error'));
   });
 

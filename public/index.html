@@ -103,9 +103,12 @@
               placeholder="Фильтр по названию, жанру, заметке…"
             />
             <select id="library-type" class="input input--select">
-              <option value="all">Фильмы и сериалы</option>
+              <option value="all">Все типы</option>
               <option value="movie">Только фильмы</option>
               <option value="tv">Только сериалы</option>
+            </select>
+            <select id="library-genre" class="input input--select" aria-label="Фильтр по жанру">
+              <option value="">Все жанры</option>
             </select>
             <select id="library-sort" class="input input--select">
               <option value="added">Сначала новые</option>
@@ -143,10 +146,10 @@
             <option value="tv">Сериалы</option>
           </select>
           <select id="search-status" class="input input--select" aria-label="В какой раздел добавлять">
-            <option value="watched">Добавлять: просмотрено</option>
-            <option value="watching">Добавлять: смотрю</option>
-            <option value="watchlist">Добавлять: буду смотреть</option>
-            <option value="dropped">Добавлять: брошено</option>
+            <option value="watched">В: Просмотрено</option>
+            <option value="watching">В: Смотрю</option>
+            <option value="watchlist">В: Буду смотреть</option>
+            <option value="dropped">В: Брошено</option>
           </select>
           <button class="btn btn--primary" type="submit">Найти</button>
         </form>

@@ -71,11 +71,35 @@ function sortEntries(list, sort, direction) {
 
 /* ------------------------------ маршруты ---------------------------- */
 
+// Жанры приходят от двух провайдеров в разном регистре и на разных языках
+// («боевик» от TMDB, «Crime» от OMDb), поэтому сравниваем по нижнему
+// регистру, а показываем первое встреченное написание с заглавной буквы.
+function collectGenres(list) {
+  const seen = new Map();
+  for (const entry of list) {
+    for (const genre of entry.genres) {
+      const original = genre.trim();
+      const key = original.toLowerCase();
+      if (!key) continue;
+      const known = seen.get(key);
+      if (known) {
+        known.count += 1;
+        continue;
+      }
+      // Поднимаем только первую букву: «НФ и Фэнтези» должно остаться собой.
+      const label = original[0].toUpperCase() + original.slice(1);
+      seen.set(key, { value: key, label, count: 1 });
+    }
+  }
+  return [...seen.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'ru'));
+}
+
 entriesRouter.get('/', async (req, res) => {
   const all = await entries.listByUser(req.user.id);
 
   const statusFilter = String(req.query.status ?? 'all').toLowerCase();
   const typeFilter = String(req.query.type ?? 'all').toLowerCase();
+  const genreFilter = String(req.query.genre ?? '').trim().toLowerCase();
   const needle = String(req.query.q ?? '').trim().toLowerCase();
   const sort = SORTS.includes(String(req.query.sort)) ? String(req.query.sort) : 'added';
   const direction = req.query.dir === 'asc' ? 'asc' : 'desc';
@@ -85,6 +109,9 @@ entriesRouter.get('/', async (req, res) => {
     if (statusFilter !== 'all' && entry.status !== statusFilter) return false;
     if (typeFilter !== 'all' && entry.mediaType !== typeFilter) return false;
     if (favoritesOnly && !entry.favorite) return false;
+    if (genreFilter && !entry.genres.some((genre) => genre.toLowerCase() === genreFilter)) {
+      return false;
+    }
     return matchesQuery(entry, needle);
   });
 
@@ -94,7 +121,20 @@ entriesRouter.get('/', async (req, res) => {
   }
   counts.favorite = all.filter((entry) => entry.favorite).length;
 
-  res.json({ entries: sortEntries(filtered, sort, direction), counts });
+  // Список жанров строим по записям, прошедшим все фильтры кроме жанрового:
+  // иначе выбор жанра схлопнул бы выпадающий список до одного пункта.
+  const genreSource = all.filter((entry) => {
+    if (statusFilter !== 'all' && entry.status !== statusFilter) return false;
+    if (typeFilter !== 'all' && entry.mediaType !== typeFilter) return false;
+    if (favoritesOnly && !entry.favorite) return false;
+    return matchesQuery(entry, needle);
+  });
+
+  res.json({
+    entries: sortEntries(filtered, sort, direction),
+    counts,
+    genres: collectGenres(genreSource),
+  });
 });
 
 entriesRouter.post('/', async (req, res) => {
