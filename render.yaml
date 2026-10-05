@@ -10,11 +10,11 @@ databases:
 services:
   - type: web
     name: listoffilms
-    runtime: node
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
     region: frankfurt
-    buildCommand: npm ci
-    startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV

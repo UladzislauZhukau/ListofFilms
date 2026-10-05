@@ -53,17 +53,36 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 ## Деплой на render.com
 
-В репозитории лежит `render.yaml` — Render поднимет веб-сервис и бесплатный
-PostgreSQL одной кнопкой.
+Сервис собирается из `Dockerfile`, блюпринт `render.yaml` поднимает его
+вместе с бесплатным PostgreSQL одной кнопкой.
 
 1. Запушить репозиторий на GitHub.
 2. Render → **Blueprints** → **New Blueprint Instance** → выбрать репозиторий.
 3. Render спросит значения `TMDB_API_KEY` и `OMDB_API_KEY` — ввести их.
    `SESSION_SECRET` и `DATABASE_URL` подставятся сами.
-4. Дождаться деплоя. Проверка живости — `GET /api/health`.
+4. Дождаться сборки образа. Проверка живости — `GET /api/health`.
 
-Без блюпринта (вручную): Web Service → Build `npm ci`, Start `npm start`,
-отдельно создать PostgreSQL и прописать все переменные из таблицы выше.
+Без блюпринта (вручную): **New → Web Service**, Language/Runtime — **Docker**,
+Dockerfile Path `./Dockerfile`, Health Check Path `/api/health`. Отдельно
+создать PostgreSQL и прописать все переменные из таблицы выше.
+
+### Docker локально
+
+```bash
+docker build -t listoffilms .
+docker run --rm -p 3000:3000 \
+  -e SESSION_SECRET=любая-длинная-строка \
+  -e TMDB_API_KEY=... \
+  -e OMDB_API_KEY=... \
+  listoffilms
+```
+
+Без `DATABASE_URL` контейнер пишет в SQLite внутри `/app/data` — данные
+исчезнут вместе с контейнером. Чтобы сохранить их, примонтируйте том
+(`-v lof-data:/app/data`) или передайте `DATABASE_URL`.
+
+Образ запускает `node server.js` напрямую, поэтому процесс получает SIGTERM
+от Render и закрывает сервер и пул соединений штатно.
 
 > Бесплатный веб-сервис Render засыпает после 15 минут простоя — первый
 > запрос после сна открывается ~30 секунд. Бесплатный PostgreSQL на Render
@@ -98,6 +117,8 @@ PostgreSQL одной кнопкой.
 ## Структура
 
 ```
+Dockerfile             образ для Render: npm ci отдельным слоем, запуск от node
+render.yaml            блюпринт: веб-сервис на Docker + PostgreSQL
 server.js              запуск, middleware, роутинг верхнего уровня
 src/config.js          переменные окружения и лимиты
 src/auth.js            сессии, bcrypt, валидация ника и пароля
