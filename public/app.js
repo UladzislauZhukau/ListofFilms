@@ -229,22 +229,11 @@ async function loadLibrary() {
 
 /* -------------------------------- поиск ------------------------------ */
 
-// Раздел, в который добавляет кнопка на карточке поиска. Запоминается между
-// сессиями: обычно добавляют несколько тайтлов подряд в один и тот же список.
-const ADD_STATUS_KEY = 'lof:add-status';
-
-function addStatus() {
-  const chosen = $('#search-status')?.value;
-  return STATUS_LABELS[chosen] ? chosen : 'watched';
-}
-
 function searchCard(item) {
   const meta = [item.year, TYPE_LABELS[item.mediaType], item.source === 'tmdb' ? 'TMDB' : 'OMDb']
     .filter(Boolean)
     .join(' · ');
-  const label = item.inList
-    ? `В списке: ${STATUS_LABELS[item.savedStatus] ?? ''}`
-    : `+ ${STATUS_LABELS[addStatus()]}`;
+  const label = item.inList ? `В списке: ${STATUS_LABELS[item.savedStatus] ?? ''}` : 'Добавить ▾';
 
   return `
     <article class="card" data-ref="${escapeHtml(item.ref)}">
@@ -256,7 +245,10 @@ function searchCard(item) {
         <div class="card__title">${escapeHtml(item.title)}</div>
         <div class="card__meta">${escapeHtml(meta)}</div>
       </div>
-      <button class="btn btn--sm card__action ${item.inList ? '' : 'btn--primary'}" type="button" data-quick-add="${escapeHtml(item.ref)}">
+      <button class="btn btn--sm card__action ${item.inList ? '' : 'btn--primary'}" type="button"
+        data-quick-add="${escapeHtml(item.ref)}"
+        data-current-status="${escapeHtml(item.savedStatus ?? '')}"
+        aria-haspopup="menu">
         ${escapeHtml(label)}
       </button>
     </article>`;
@@ -264,6 +256,7 @@ function searchCard(item) {
 
 async function runSearch(event) {
   event?.preventDefault();
+  closeAddMenu();
   const query = $('#search-input').value.trim();
   const type = $('#search-type').value;
   const grid = $('#search-grid');
@@ -303,13 +296,61 @@ async function runSearch(event) {
   }
 }
 
-async function quickAdd(ref, button) {
+/* --------------------- меню выбора раздела ---------------------------- */
+
+// Кнопка на карточке не добавляет сразу, а открывает меню: раздел выбирается
+// для каждого фильма отдельно, в момент добавления.
+let addMenuTarget = null;
+
+function closeAddMenu() {
+  show($('#add-menu'), false);
+  addMenuTarget = null;
+}
+
+function addMenuMarkup(currentStatus) {
+  const title = currentStatus ? 'Перенести в раздел' : 'Добавить в раздел';
+  const items = Object.entries(STATUS_LABELS).map(([value, label]) => {
+    const isCurrent = value === currentStatus;
+    return `<button class="menu__item${isCurrent ? ' is-current' : ''}" type="button"
+      role="menuitem" data-add-status="${value}">
+      <span>${label}</span>${isCurrent ? '<span>✓</span>' : ''}
+    </button>`;
+  });
+  return `<div class="menu__title">${title}</div>${items.join('')}`;
+}
+
+// Меню с position: fixed, поэтому считаем от координат вьюпорта и
+// прижимаем к краям, чтобы на узком экране оно не уехало за границу.
+function placeAddMenu(menu, button) {
+  const anchor = button.getBoundingClientRect();
+  menu.style.visibility = 'hidden';
+  show(menu, true);
+
+  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - menu.offsetWidth - 8));
+  const below = anchor.bottom + 6;
+  const fitsBelow = below + menu.offsetHeight <= window.innerHeight - 8;
+  const top = fitsBelow ? below : Math.max(8, anchor.top - menu.offsetHeight - 6);
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.style.visibility = '';
+}
+
+function openAddMenu(button) {
+  const menu = $('#add-menu');
+  menu.innerHTML = addMenuMarkup(button.dataset.currentStatus || null);
+  addMenuTarget = { ref: button.dataset.quickAdd, button };
+  placeAddMenu(menu, button);
+}
+
+async function quickAdd(ref, button, status) {
   button.disabled = true;
   try {
     const { entry, updated } = await api('/entries', {
       method: 'POST',
-      body: { ref, status: addStatus() },
+      body: { ref, status },
     });
+    button.dataset.currentStatus = entry.status;
     toast(
       updated
         ? `«${entry.title}» перенесён: ${STATUS_LABELS[entry.status].toLowerCase()}`
@@ -317,13 +358,13 @@ async function quickAdd(ref, button) {
     );
     button.classList.remove('btn--primary');
     button.textContent = `В списке: ${STATUS_LABELS[entry.status]}`;
+    // Метку перерисовываем целиком: при переносе между разделами у неё
+    // меняется цвет, а не только факт присутствия в списке.
     const card = button.closest('.card');
-    if (card && !card.querySelector('.card__badges')) {
-      card.querySelector('.card__poster').insertAdjacentHTML(
-        'beforeend',
-        `<div class="card__badges"><span class="badge badge--${entry.status}">✓ в списке</span></div>`
-      );
-    }
+    const badge = `<div class="card__badges"><span class="badge badge--${entry.status}">✓ ${STATUS_LABELS[entry.status]}</span></div>`;
+    const existing = card?.querySelector('.card__badges');
+    if (existing) existing.outerHTML = badge;
+    else card?.querySelector('.card__poster').insertAdjacentHTML('beforeend', badge);
   } catch (error) {
     toast(error.message, 'error');
   } finally {
@@ -700,12 +741,27 @@ function wireEvents() {
 
   // карточки: клик по карточке открывает детали
   document.addEventListener('click', (event) => {
+    const choice = event.target.closest('[data-add-status]');
+    if (choice) {
+      event.stopPropagation();
+      const target = addMenuTarget;
+      closeAddMenu();
+      if (target) quickAdd(target.ref, target.button, choice.dataset.addStatus);
+      return;
+    }
+
+    if (event.target.closest('#add-menu')) return;
+
     const quick = event.target.closest('[data-quick-add]');
     if (quick) {
       event.stopPropagation();
-      quickAdd(quick.dataset.quickAdd, quick);
+      // Повторный клик по той же кнопке закрывает меню.
+      if (addMenuTarget?.button === quick) closeAddMenu();
+      else openAddMenu(quick);
       return;
     }
+
+    closeAddMenu();
 
     const card = event.target.closest('.card');
     if (!card) return;
@@ -723,22 +779,17 @@ function wireEvents() {
   $('#search-form').addEventListener('submit', runSearch);
   $('#search-type').addEventListener('change', () => runSearch());
 
-  $('#search-status').addEventListener('change', (event) => {
-    try {
-      localStorage.setItem(ADD_STATUS_KEY, event.target.value);
-    } catch {
-      /* приватный режим — просто не запоминаем выбор */
-    }
-    // Перерисовываем выдачу, чтобы подписи кнопок совпали с новым разделом.
-    if (state.searchResults.length) {
-      $('#search-grid').innerHTML = state.searchResults.map(searchCard).join('');
-    }
-  });
+  // Меню привязано к координатам кнопки, поэтому при прокрутке и смене
+  // размеров окна проще закрыть его, чем пересчитывать позицию.
+  window.addEventListener('resize', closeAddMenu);
+  window.addEventListener('scroll', closeAddMenu, true);
 
   // модалка
   $$('[data-close-modal]').forEach((node) => node.addEventListener('click', closeModal));
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeModal();
+    if (event.key !== 'Escape') return;
+    if (addMenuTarget) closeAddMenu();
+    else closeModal();
   });
 
   // профиль
@@ -800,12 +851,6 @@ async function boot() {
   wireEvents();
   setAuthMode('login');
 
-  try {
-    const savedStatus = localStorage.getItem(ADD_STATUS_KEY);
-    if (savedStatus && STATUS_LABELS[savedStatus]) $('#search-status').value = savedStatus;
-  } catch {
-    /* приватный режим — остаётся раздел по умолчанию */
-  }
 
   // Красивые ссылки /u/<ник> переводим в hash-маршрут.
   const prettyProfile = location.pathname.match(/^\/u\/(.+)$/);
