@@ -254,9 +254,14 @@ function searchCard(item) {
     </article>`;
 }
 
+// Номер последнего запроса: ответы на устаревшие запросы (пользователь уже
+// допечатал дальше) отбрасываются, чтобы не перетереть свежую выдачу.
+let searchSeq = 0;
+
 async function runSearch(event) {
   event?.preventDefault();
   closeAddMenu();
+  const seq = ++searchSeq;
   const query = $('#search-input').value.trim();
   const type = $('#search-type').value;
   const grid = $('#search-grid');
@@ -270,12 +275,16 @@ async function runSearch(event) {
     return;
   }
 
-  empty.textContent = 'Ищем…';
-  show(empty, true);
-  show(grid, false);
+  // Пока идёт запрос, прежняя выдача остаётся на экране — так при наборе
+  // текста не мигает заглушка «Ищем…».
+  if (grid.classList.contains('hidden') || !grid.children.length) {
+    empty.textContent = 'Ищем…';
+    show(empty, true);
+  }
 
   try {
     const data = await api(`/search?q=${encodeURIComponent(query)}&type=${type}`);
+    if (seq !== searchSeq) return;
     state.searchResults = data.results;
 
     const broken = Object.entries(data.providers || {})
@@ -290,6 +299,7 @@ async function runSearch(event) {
     show(empty, data.results.length === 0);
     if (!data.results.length) empty.textContent = `По запросу «${query}» ничего не нашлось.`;
   } catch (error) {
+    if (seq !== searchSeq) return;
     show(grid, false);
     show(empty, true);
     empty.textContent = error.message;
@@ -776,7 +786,15 @@ function wireEvents() {
   });
 
   // поиск
-  $('#search-form').addEventListener('submit', runSearch);
+  let liveSearchDebounce = null;
+  $('#search-form').addEventListener('submit', (event) => {
+    clearTimeout(liveSearchDebounce);
+    runSearch(event);
+  });
+  $('#search-input').addEventListener('input', () => {
+    clearTimeout(liveSearchDebounce);
+    liveSearchDebounce = setTimeout(() => runSearch(), 350);
+  });
   $('#search-type').addEventListener('change', () => runSearch());
 
   // Меню привязано к координатам кнопки, поэтому при прокрутке и смене
