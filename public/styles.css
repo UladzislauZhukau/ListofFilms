@@ -389,6 +389,13 @@ h4 {
   margin-bottom: 20px;
 }
 
+.view__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .view__head h2 {
   font-size: 22px;
   letter-spacing: -0.4px;

@@ -3,6 +3,7 @@ import { requireAuth } from '../auth.js';
 import { limits } from '../config.js';
 import { entries } from '../db/index.js';
 import { getTitle, parseRef } from '../providers.js';
+import { buildXlsx } from '../xlsx.js';
 
 export const STATUSES = ['watched', 'watching', 'watchlist', 'dropped'];
 const SORTS = ['added', 'title', 'year', 'rating', 'watched'];
@@ -135,6 +136,60 @@ entriesRouter.get('/', async (req, res) => {
     counts,
     genres: collectGenres(genreSource),
   });
+});
+
+const STATUS_LABELS = {
+  watched: 'Просмотрено',
+  watching: 'Смотрю',
+  watchlist: 'Буду смотреть',
+  dropped: 'Брошено',
+};
+const TYPE_LABELS = { movie: 'Фильм', tv: 'Сериал' };
+
+const EXPORT_COLUMNS = [
+  { header: 'Название', width: 34 },
+  { header: 'Оригинальное название', width: 30 },
+  { header: 'Тип', width: 10 },
+  { header: 'Год', width: 8 },
+  { header: 'Статус', width: 16 },
+  { header: 'Оценка', width: 9 },
+  { header: 'Избранное', width: 11 },
+  { header: 'Дата просмотра', width: 15 },
+  { header: 'Жанры', width: 28 },
+  { header: 'Длительность, мин', width: 12 },
+  { header: 'Заметка', width: 50 },
+  { header: 'IMDb', width: 13 },
+  { header: 'Добавлено', width: 12 },
+];
+
+entriesRouter.get('/export.xlsx', async (req, res) => {
+  const all = sortEntries(await entries.listByUser(req.user.id), 'title', 'desc');
+  const rows = all.map((entry) => [
+    entry.title,
+    entry.originalTitle && entry.originalTitle !== entry.title ? entry.originalTitle : null,
+    TYPE_LABELS[entry.mediaType] ?? entry.mediaType,
+    entry.year,
+    STATUS_LABELS[entry.status] ?? entry.status,
+    entry.rating,
+    entry.favorite ? 'Да' : null,
+    entry.watchedOn,
+    entry.genres.join(', '),
+    entry.runtime,
+    entry.review,
+    entry.imdbId,
+    entry.createdAt ? entry.createdAt.slice(0, 10) : null,
+  ]);
+
+  const file = buildXlsx({ sheetName: 'Мой список', columns: EXPORT_COLUMNS, rows });
+  const date = new Date().toISOString().slice(0, 10);
+  const name = `Мой список фильмов ${date}.xlsx`;
+  res
+    .set({
+      'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'content-disposition': `attachment; filename="films-${date}.xlsx"; filename*=UTF-8''${encodeURIComponent(name)}`,
+      'cache-control': 'no-store',
+    })
+    .send(file);
 });
 
 entriesRouter.post('/', async (req, res) => {

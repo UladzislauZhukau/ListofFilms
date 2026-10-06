@@ -90,7 +90,10 @@
       <main class="view hidden" id="view-library">
         <div class="view__head">
           <h2>Моя библиотека</h2>
-          <a class="btn btn--primary btn--sm" href="#/search">+ Добавить фильм</a>
+          <div class="view__actions">
+            <a class="btn btn--ghost btn--sm" href="/api/entries/export.xlsx" download>Скачать Excel</a>
+            <a class="btn btn--primary btn--sm" href="#/search">+ Добавить фильм</a>
+          </div>
         </div>
 
         <div class="filters">
