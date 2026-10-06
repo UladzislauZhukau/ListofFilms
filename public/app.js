@@ -146,7 +146,42 @@ function posterMarkup(item) {
   return `<div class="card__noposter">${escapeHtml(item.title)}</div>`;
 }
 
-function entryCard(entry) {
+// Оценка прямо на карточке, чтобы проставлять её подряд, не открывая
+// каждый фильм. Для «Буду смотреть» оценивать ещё нечего.
+function rateControl(entry) {
+  return `<label class="card__rate">
+    <span>Оценка</span>
+    <select class="card__rate-select" data-rate-entry="${entry.id}" aria-label="Оценка «${escapeHtml(entry.title)}»">
+      ${ratingOptions(entry.rating, '—')}
+    </select>
+  </label>`;
+}
+
+async function rateFromCard(select) {
+  const id = Number(select.dataset.rateEntry);
+  const entry = state.library.entries.find((item) => item.id === id);
+  const rating = select.value ? Number(select.value) : null;
+  const previous = entry?.rating ?? null;
+  select.disabled = true;
+
+  try {
+    const { entry: saved } = await api(`/entries/${id}`, { method: 'PATCH', body: { rating } });
+    if (entry) entry.rating = saved.rating;
+
+    // Меняем только бейдж на постере: полная перерисовка сбила бы
+    // прокрутку и порядок, пока человек идёт по списку.
+    const poster = select.closest('.card').querySelector('.card__poster');
+    poster.querySelector('.card__score')?.remove();
+    if (saved.rating) poster.insertAdjacentHTML('beforeend', `<div class="card__score">${saved.rating}</div>`);
+  } catch (error) {
+    select.value = previous ?? '';
+    toast(error.message, 'error');
+  } finally {
+    select.disabled = false;
+  }
+}
+
+function entryCard(entry, { editable = false } = {}) {
   const meta = [entry.year, TYPE_LABELS[entry.mediaType]].filter(Boolean).join(' · ');
   return `
     <article class="card" data-entry-id="${entry.id}">
@@ -161,6 +196,7 @@ function entryCard(entry) {
       <div class="card__body">
         <div class="card__title">${escapeHtml(entry.title)}</div>
         <div class="card__meta">${escapeHtml(meta)}</div>
+        ${editable && entry.status !== 'watchlist' ? rateControl(entry) : ''}
       </div>
     </article>`;
 }
@@ -216,7 +252,7 @@ async function loadLibrary() {
   const empty = $('#library-empty');
   const list = state.library.entries;
 
-  grid.innerHTML = list.map(entryCard).join('');
+  grid.innerHTML = list.map((entry) => entryCard(entry, { editable: true })).join('');
   show(grid, list.length > 0);
   show(empty, list.length === 0);
 
@@ -394,8 +430,8 @@ function openModal(html) {
   show($('#modal'), true);
 }
 
-function ratingOptions(selected) {
-  const options = ['<option value="">без оценки</option>'];
+function ratingOptions(selected, emptyLabel = 'без оценки') {
+  const options = [`<option value="">${emptyLabel}</option>`];
   for (let value = 10; value >= 1; value -= 1) {
     options.push(`<option value="${value}"${selected === value ? ' selected' : ''}>${value}</option>`);
   }
@@ -761,6 +797,7 @@ function wireEvents() {
     }
 
     if (event.target.closest('#add-menu')) return;
+    if (event.target.closest('.card__rate')) return;
 
     const quick = event.target.closest('[data-quick-add]');
     if (quick) {
@@ -783,6 +820,11 @@ function wireEvents() {
         null;
       if (entry) openDetail(entry.ref);
     }
+  });
+
+  $('#library-grid').addEventListener('change', (event) => {
+    const select = event.target.closest('[data-rate-entry]');
+    if (select) rateFromCard(select);
   });
 
   // поиск
